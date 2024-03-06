@@ -50,4 +50,10 @@ namespace ACSCallingNativeRegistrarLite.Models
         public string? rawId { get; set; }
         public Communicationuser? communicationUser { get; set; }
     }
+
+    public class IncomingCallContext
+    {
+        public string? cc { get; set;}
+        public string? shrToken { get; set; }
+    }
 }

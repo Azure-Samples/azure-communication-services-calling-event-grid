@@ -137,15 +137,6 @@ namespace ACSCallingNativeRegistrarLite.Utilities
             return pushNotification;
         }
 
-        private static byte[] DecodeBase64(string input)
-        {
-            byte[] base64EncodedBytes = Encoding.UTF8.GetBytes(input);
-            byte[] decodedBytes = new byte[base64EncodedBytes.Length];
-            FromBase64Transform myTransform = new FromBase64Transform();
-            _ = myTransform.TransformBlock(base64EncodedBytes, 0, base64EncodedBytes.Length, decodedBytes, 0);
-            return decodedBytes;
-        }
-
         private static string GetSubstring(string input, string startString, string endString)
         {
             int pFrom = input.IndexOf(startString) + startString.Length;
@@ -155,17 +146,32 @@ namespace ACSCallingNativeRegistrarLite.Utilities
 
         private static string? ExtractCC(string? incomingCallContext, ILogger logger)
         {
-            if (incomingCallContext == null)
-            {
-                logger.LogCritical("IncomingCallContext in the payload is empty");
-                return null;
-            }
+            if (incomingCallContext == null) { return null; }
+            logger.LogInformation("IncomingCallContext => " + incomingCallContext);
             var parts = incomingCallContext.Split('.');
-            byte[] data = DecodeBase64(parts[1]);
+            // Add the missing padding otherwise Convert.FromBase64String fails with error
+            // The input is not a valid Base-64 string as it contains a non-base 64 character,
+            // more than two padding characters, or an illegal character among the padding characters.'
+            var ccString = parts[1].PadRight(4 * ((parts[1].Length + 3) / 4), '=');
+            byte[] data = Convert.FromBase64String(ccString);
             string decodedString = Encoding.UTF8.GetString(data);
-            var cc = GetSubstring(decodedString, "\"cc\":\"", ",\"shrToken\"");
-            logger.LogInformation("CC => " + cc);
-            return cc;
+            var incomingCallContextDecoded = JsonConvert.DeserializeObject<IncomingCallContext>(decodedString);
+
+            if (incomingCallContextDecoded == null)
+            {
+                throw new Exception("Failed to extract CC from IncomingCallContext");
+            }
+            logger.LogInformation("Extracted CC => " + incomingCallContextDecoded.cc);
+
+            if (string.IsNullOrEmpty(incomingCallContextDecoded.cc))
+            {
+                throw new Exception("Extracted CC is empty");
+            }
+
+            // Ensure that extracted CC can be decoded with Base64
+            Convert.FromBase64String(incomingCallContextDecoded.cc);
+
+            return incomingCallContextDecoded.cc;
         }
 
         private static string SignString(string toSign, string sasKeyValue)
